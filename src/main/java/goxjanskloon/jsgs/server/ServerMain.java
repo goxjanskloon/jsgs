@@ -1,0 +1,82 @@
+package goxjanskloon.jsgs.server;
+import goxjanskloon.jsgs.inject.InjectionPoint;
+import goxjanskloon.jsgs.network.handler.PacketHandler;
+import goxjanskloon.jsgs.network.handler.DecoderHandler;
+import goxjanskloon.jsgs.network.handler.EncoderHandler;
+import goxjanskloon.jsgs.network.packet.DisconnectionSignal;
+import goxjanskloon.jsgs.network.packet.c2s.ClientRegisterationC2SPacket;
+import goxjanskloon.jsgs.network.packet.s2c.ServerNameS2CPacket;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.logging.LoggingHandler;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
+public class ServerMain{
+    private static final Logger LOGGER=LogManager.getLogger();
+    private static final int injectionKey=ThreadLocalRandom.current().nextInt();
+    public final InjectionPoint<ServerMain> injectAfterClose=new InjectionPoint<>(injectionKey);
+    public final String name,localAddress;
+    public final int port;
+    private EventLoopGroup bossGroup,workerGroup;
+    private final Map<Integer,Client> clients=new ConcurrentHashMap<>();
+    public ServerMain(int port,String name){
+        this.name=name;
+        this.port=port;
+        try{
+            localAddress=InetAddress.getLocalHost().getHostAddress();
+        }catch(UnknownHostException e){
+            throw new RuntimeException(e);
+        }
+    }
+    public void start(){
+        bossGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+        workerGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+        ChannelFuture f=new ServerBootstrap().group(bossGroup,workerGroup).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<>(){
+            @Override public void initChannel(Channel c){
+                var h=new PacketHandler();
+                h.addListener(ClientRegisterationC2SPacket.TYPE,packet->{
+                    var p=(ClientRegisterationC2SPacket)packet;
+                    var client=new Client(p.name,p.id,h,ServerMain.this);
+                    clients.put(p.id,client);
+                    LOGGER.info("Registered client {} (id={})",p.name,p.id);
+                    h.send(new ServerNameS2CPacket(name));
+                    h.addListener(DisconnectionSignal.TYPE,()->unregisterClient(client.id));
+                });
+                c.pipeline()
+                        .addLast("logging",new LoggingHandler())
+                        .addLast("decoding",new DecoderHandler())
+                        .addLast("packetListening",h)
+                        .addLast("encoding",new EncoderHandler());
+            }
+        }).bind(port);
+        try{
+            f.sync();
+        }catch(InterruptedException e){
+            LOGGER.error(e.toString());
+        }
+    }
+    public void unregisterClient(int id){
+        LOGGER.info("Unregistered client {} (id={})",clients.remove(id).name,id);
+    }
+    public void close()throws InterruptedException{
+        if(!clients.isEmpty()){
+            for(var c: clients.values())
+                c.disconnect();
+            clients.clear();
+        }
+        workerGroup.shutdownGracefully().sync();
+        bossGroup.shutdownGracefully().sync();
+        injectAfterClose.run(injectionKey,this);
+    }
+}
