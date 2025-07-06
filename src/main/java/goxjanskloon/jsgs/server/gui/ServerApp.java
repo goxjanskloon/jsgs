@@ -8,11 +8,8 @@ import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.stage.Stage;
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 public class ServerApp extends Application{
-    private static final Logger LOGGER=LogManager.getLogger();
     @Override public void start(Stage stage)throws Exception{
         var opt=new ServerBootstrapDialog().showAndWait();
         if(opt.isPresent()){
@@ -40,13 +37,7 @@ public class ServerApp extends Application{
             stage.show();
             server.start();
             server.injectAfterClose.inject(_->stage.close());
-            stage.setOnCloseRequest(_->{
-                try{
-                    server.close();
-                }catch(InterruptedException e){
-                    LOGGER.error("Error closing server",e);
-                }
-            });
+            stage.setOnCloseRequest(_->server.close());
         }else
             stop();
     }

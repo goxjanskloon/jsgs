@@ -1,9 +1,10 @@
 package goxjanskloon.jsgs.server;
 import goxjanskloon.jsgs.inject.InjectionPoint;
+import goxjanskloon.jsgs.network.Signals;
 import goxjanskloon.jsgs.network.handler.PacketHandler;
 import goxjanskloon.jsgs.network.handler.DecoderHandler;
 import goxjanskloon.jsgs.network.handler.EncoderHandler;
-import goxjanskloon.jsgs.network.packet.DisconnectionSignal;
+import goxjanskloon.jsgs.network.handler.SignalHandler;
 import goxjanskloon.jsgs.network.packet.c2s.ClientRegisterationC2SPacket;
 import goxjanskloon.jsgs.network.packet.s2c.ServerNameS2CPacket;
 import io.netty.bootstrap.ServerBootstrap;
@@ -45,18 +46,20 @@ public class ServerMain{
         ChannelFuture f=new ServerBootstrap().group(bossGroup,workerGroup).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<>(){
             @Override public void initChannel(Channel c){
                 var h=new PacketHandler();
+                var s=new SignalHandler();
                 h.addListener(ClientRegisterationC2SPacket.TYPE,packet->{
                     var p=(ClientRegisterationC2SPacket)packet;
-                    var client=new Client(p.name,p.id,h,ServerMain.this);
+                    var client=new Client(p.name,p.id,h,s,ServerMain.this);
                     clients.put(p.id,client);
                     LOGGER.info("Registered client {} (id={})",p.name,p.id);
                     h.send(new ServerNameS2CPacket(name));
-                    h.addListener(DisconnectionSignal.TYPE,()->unregisterClient(client.id));
+                    s.addListener(Signals.DISCONNECTION,()->unregisterClient(client.id));
                 });
                 c.pipeline()
                         .addLast("logging",new LoggingHandler())
                         .addLast("decoding",new DecoderHandler())
                         .addLast("packetListening",h)
+                        .addLast("signalListening",s)
                         .addLast("encoding",new EncoderHandler());
             }
         }).bind(port);
@@ -69,14 +72,18 @@ public class ServerMain{
     public void unregisterClient(int id){
         LOGGER.info("Unregistered client {} (id={})",clients.remove(id).name,id);
     }
-    public void close()throws InterruptedException{
+    public void close(){
         if(!clients.isEmpty()){
             for(var c: clients.values())
                 c.disconnect();
             clients.clear();
         }
-        workerGroup.shutdownGracefully().sync();
-        bossGroup.shutdownGracefully().sync();
+        try{
+            workerGroup.shutdownGracefully().sync();
+            bossGroup.shutdownGracefully().sync();
+        }catch(InterruptedException e){
+            LOGGER.error("Error shutting down event loop group(s)",e);
+        }
         injectAfterClose.run(injectionKey,this);
     }
 }

@@ -2,6 +2,7 @@ package goxjanskloon.jsgs.client;
 import goxjanskloon.jsgs.network.handler.PacketHandler;
 import goxjanskloon.jsgs.network.handler.DecoderHandler;
 import goxjanskloon.jsgs.network.handler.EncoderHandler;
+import goxjanskloon.jsgs.network.handler.SignalHandler;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -18,6 +19,7 @@ public class ClientMain{
     private static final Logger LOGGER=LogManager.getLogger();
     private final EventLoopGroup workerGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
     private final PacketHandler packetHandler=new PacketHandler();
+    private final SignalHandler signalHandler=new SignalHandler();
     private Server server;
     public final int id=ThreadLocalRandom.current().nextInt(),port;
     public final String name,host;
@@ -25,7 +27,6 @@ public class ClientMain{
         this.name=name;
         this.host=host;
         this.port=port;
-        
     }
     public void start(){
         ChannelFuture f=new Bootstrap().group(workerGroup).channel(NioSocketChannel.class).handler(new ChannelInitializer<>(){
@@ -34,18 +35,23 @@ public class ClientMain{
                         .addLast("logging",new LoggingHandler())
                         .addLast("decoding",new DecoderHandler())
                         .addLast("packetListening",packetHandler)
+                        .addLast("signalListening",signalHandler)
                         .addLast("encoding",new EncoderHandler());
             }
         }).connect(host,port);
         try{
             f.sync();
         }catch(InterruptedException e){
-            LOGGER.error("Error syncing",e);
+            LOGGER.error(e);
         }
-        server=new Server(packetHandler,this);
+        server=new Server(packetHandler,signalHandler,this);
     }
-    public void close()throws InterruptedException{
+    public void close(){
         server.disconnect();
-        workerGroup.shutdownGracefully();
+        try{
+            workerGroup.shutdownGracefully().sync();
+        }catch(InterruptedException e){
+            LOGGER.error("Error shutting down workerGroup",e);
+        }
     }
 }

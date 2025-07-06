@@ -6,6 +6,8 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import java.util.List;
 public class DecoderHandler extends ByteToMessageDecoder{
     @Override protected void decode(ChannelHandlerContext ctx,ByteBuf in,List<Object> out){
-        out.add(PacketType.getType(in.readInt()).decode(in));
+        int id=in.readInt();
+        var type=PacketType.getType(id);
+        out.add(type!=null?type.decode(in):id);
     }
 }
