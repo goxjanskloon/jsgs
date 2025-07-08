@@ -12,6 +12,9 @@ public class PacketType<T extends Packet<T>>{
     public Packet<T> decode(ByteBuf buf){
         return decoder.decode(buf);
     }
+    @Override public String toString(){
+        return "PacketType:id="+id;
+    }
     private static final Map<Integer,PacketType<?>> TYPES=new HashMap<>();
     @SuppressWarnings("unchecked")
     public static <T extends Packet<T>> PacketType<T> register(Class<T> clazz,PacketDecoder<T> decoder){

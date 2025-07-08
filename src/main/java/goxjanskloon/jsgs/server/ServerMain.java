@@ -22,11 +22,13 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 public class ServerMain{
     private static final Logger LOGGER=LogManager.getLogger();
-    private static final int injectionKey=ThreadLocalRandom.current().nextInt();
-    public final InjectionPoint<ServerMain> injectAfterClose=new InjectionPoint<>(injectionKey);
+    private static class Inject extends InjectionPoint<ServerMain>{
+        public void run(ServerMain s){
+            super.run(s);
+        }
+    }
     public final String name,localAddress;
     public final int port;
     private EventLoopGroup bossGroup,workerGroup;
@@ -69,9 +71,15 @@ public class ServerMain{
             LOGGER.error(e.toString());
         }
     }
-    public void unregisterClient(int id){
-        LOGGER.info("Unregistered client {} (id={})",clients.remove(id).name,id);
+    public void disconnect(Client client){
+        unregisterClient(client.id).disconnect();
     }
+    public Client unregisterClient(int id){
+        var client=clients.remove(id);
+        LOGGER.info("Unregistered client {} (id={})",client.name,id);
+        return client;
+    }
+    public final InjectionPoint<ServerMain> afterClose=new Inject();
     public void close(){
         if(!clients.isEmpty()){
             for(var c: clients.values())
@@ -84,6 +92,6 @@ public class ServerMain{
         }catch(InterruptedException e){
             LOGGER.error("Error shutting down event loop group(s)",e);
         }
-        injectAfterClose.run(injectionKey,this);
+        ((Inject)afterClose).run(this);
     }
 }

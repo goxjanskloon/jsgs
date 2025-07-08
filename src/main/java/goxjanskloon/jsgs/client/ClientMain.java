@@ -1,4 +1,6 @@
 package goxjanskloon.jsgs.client;
+import goxjanskloon.jsgs.inject.InjectionPoint;
+import goxjanskloon.jsgs.network.Signals;
 import goxjanskloon.jsgs.network.handler.PacketHandler;
 import goxjanskloon.jsgs.network.handler.DecoderHandler;
 import goxjanskloon.jsgs.network.handler.EncoderHandler;
@@ -17,6 +19,11 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.ThreadLocalRandom;
 public class ClientMain{
     private static final Logger LOGGER=LogManager.getLogger();
+    private static class Inject extends InjectionPoint<ClientMain>{
+        public void run(ClientMain c){
+            super.run(c);
+        }
+    }
     private final EventLoopGroup workerGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
     private final PacketHandler packetHandler=new PacketHandler();
     private final SignalHandler signalHandler=new SignalHandler();
@@ -45,6 +52,7 @@ public class ClientMain{
             LOGGER.error(e);
         }
         server=new Server(packetHandler,signalHandler,this);
+        signalHandler.addListener(Signals.DISCONNECTION,this::closed);
     }
     public void close(){
         server.disconnect();
@@ -53,5 +61,10 @@ public class ClientMain{
         }catch(InterruptedException e){
             LOGGER.error("Error shutting down workerGroup",e);
         }
+        closed();
+    }
+    public final InjectionPoint<ClientMain> injectAfterClose=new Inject();
+    private void closed(){
+        ((Inject)injectAfterClose).run(this);
     }
 }

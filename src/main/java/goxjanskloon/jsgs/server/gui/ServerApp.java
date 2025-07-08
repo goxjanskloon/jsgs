@@ -1,45 +1,58 @@
 package goxjanskloon.jsgs.server.gui;
-import goxjanskloon.jsgs.gui.FontUtil;
-import goxjanskloon.jsgs.gui.logging.TextAreaAppender;
+import goxjanskloon.jsgs.gui.Utils;
+import goxjanskloon.jsgs.gui.logging.LoggingArea;
+import goxjanskloon.jsgs.server.Client;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
-import javafx.scene.control.TextArea;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.LoggerContext;
 public class ServerApp extends Application{
-    @Override public void start(Stage stage)throws Exception{
+    @Override public void start(Stage stage){
         var opt=new ServerBootstrapDialog().showAndWait();
         if(opt.isPresent()){
             var server=opt.get();
-            var logCtx=LoggerContext.getContext(false);
-            var logCfg=logCtx.getConfiguration();
-            var logArea=new TextArea();
-            logArea.setEditable(false);
-            logArea.setFont(FontUtil.load("JetBrains Mono",12));
-            var logAppender=new TextAreaAppender(logArea);
-            logAppender.start();
-            var rootLogger=logCfg.getRootLogger();
-            rootLogger.setLevel(Level.DEBUG);
-            for(var p:rootLogger.getAppenders().entrySet())
-                rootLogger.removeAppender(p.getKey());
-            rootLogger.addAppender(logAppender,Level.DEBUG,null);
-            logCfg.addAppender(logAppender);
-            logCtx.updateLoggers();
-            var logTab=new Tab("日志",logArea);
+            var logTab=new Tab("日志",new LoggingArea());
             logTab.setClosable(false);
-            stage.setScene(new Scene(new TabPane(logTab)));
+            var clientsList=new ListView<Client>();
+            Client.AFTER_REGISTRATION.inject(client->{
+                Platform.runLater(()->clientsList.getItems().add(client));
+                client.afterDisconnection.inject(_->Platform.runLater(()->clientsList.getItems().remove(client)));
+            });
+            var disconnectButton=new Button("断开连接");
+            disconnectButton.setDisable(true);
+            disconnectButton.setOnMouseClicked(_->{
+                for(var client:clientsList.getSelectionModel().getSelectedItems())
+                    if(client!=null)
+                        server.disconnect(client);
+            });
+            clientsList.setCellFactory(_->new ListCell<>(){
+                @Override protected void updateItem(Client client,boolean empty){
+                    super.updateItem(client,empty);
+                    setText(client==null?null:client.name+" (ID:"+client.id+")");
+                }
+                @Override public void updateSelected(boolean selected){
+                    super.updateSelected(selected);
+                    disconnectButton.setDisable(!selected);
+                }
+            });
+            var clientsTab=new Tab("客户端列表",new VBox(clientsList,disconnectButton));
+            clientsTab.setClosable(false);
+            stage.setScene(new Scene(new TabPane(logTab,clientsTab)));
             stage.setTitle("JSGS服务端 - "+server.name);
             stage.setWidth(1000);
             stage.setHeight(600);
+            Utils.confirmOnClose(stage,server::close);
             stage.show();
+            server.afterClose.inject(_->Platform.exit());
             server.start();
-            server.injectAfterClose.inject(_->stage.close());
-            stage.setOnCloseRequest(_->server.close());
         }else
-            stop();
+            Platform.exit();
     }
     public static void main(String[] args){
         launch(args);
