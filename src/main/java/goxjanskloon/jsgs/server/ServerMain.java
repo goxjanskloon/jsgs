@@ -1,5 +1,4 @@
 package goxjanskloon.jsgs.server;
-import goxjanskloon.jsgs.inject.InjectionPoint;
 import goxjanskloon.jsgs.network.Signals;
 import goxjanskloon.jsgs.network.handler.PacketHandler;
 import goxjanskloon.jsgs.network.handler.DecoderHandler;
@@ -12,8 +11,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.MultiThreadIoEventLoopGroup;
-import io.netty.channel.nio.NioIoHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LoggingHandler;
 import org.apache.logging.log4j.LogManager;
@@ -24,11 +22,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 public class ServerMain{
     private static final Logger LOGGER=LogManager.getLogger();
-    private static class Inject extends InjectionPoint<ServerMain>{
-        public void run(ServerMain s){
-            super.run(s);
-        }
-    }
     public final String name,localAddress;
     public final int port;
     private EventLoopGroup bossGroup,workerGroup;
@@ -43,8 +36,8 @@ public class ServerMain{
         }
     }
     public void start(){
-        bossGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
-        workerGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+        bossGroup=new NioEventLoopGroup();
+        workerGroup=new NioEventLoopGroup();
         ChannelFuture f=new ServerBootstrap().group(bossGroup,workerGroup).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<>(){
             @Override public void initChannel(Channel c){
                 var h=new PacketHandler();
@@ -79,7 +72,6 @@ public class ServerMain{
         LOGGER.info("Unregistered client {} (id={})",client.name,id);
         return client;
     }
-    public final InjectionPoint<ServerMain> afterClose=new Inject();
     public void close(){
         if(!clients.isEmpty()){
             for(var c: clients.values())
@@ -92,6 +84,5 @@ public class ServerMain{
         }catch(InterruptedException e){
             LOGGER.error("Error shutting down event loop group(s)",e);
         }
-        ((Inject)afterClose).run(this);
     }
 }

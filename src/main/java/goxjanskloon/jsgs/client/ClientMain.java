@@ -1,6 +1,4 @@
 package goxjanskloon.jsgs.client;
-import goxjanskloon.jsgs.inject.InjectionPoint;
-import goxjanskloon.jsgs.network.Signals;
 import goxjanskloon.jsgs.network.handler.PacketHandler;
 import goxjanskloon.jsgs.network.handler.DecoderHandler;
 import goxjanskloon.jsgs.network.handler.EncoderHandler;
@@ -10,8 +8,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.MultiThreadIoEventLoopGroup;
-import io.netty.channel.nio.NioIoHandler;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.logging.LoggingHandler;
 import org.apache.logging.log4j.LogManager;
@@ -19,12 +16,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.ThreadLocalRandom;
 public class ClientMain{
     private static final Logger LOGGER=LogManager.getLogger();
-    private static class Inject extends InjectionPoint<ClientMain>{
-        public void run(ClientMain c){
-            super.run(c);
-        }
-    }
-    private final EventLoopGroup workerGroup=new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+    private EventLoopGroup workerGroup;
     private final PacketHandler packetHandler=new PacketHandler();
     private final SignalHandler signalHandler=new SignalHandler();
     private Server server;
@@ -36,6 +28,7 @@ public class ClientMain{
         this.port=port;
     }
     public void start(){
+        workerGroup=new NioEventLoopGroup();
         ChannelFuture f=new Bootstrap().group(workerGroup).channel(NioSocketChannel.class).handler(new ChannelInitializer<>(){
             @Override public void initChannel(Channel c){
                 c.pipeline()
@@ -52,7 +45,6 @@ public class ClientMain{
             LOGGER.error(e);
         }
         server=new Server(packetHandler,signalHandler,this);
-        signalHandler.addListener(Signals.DISCONNECTION,this::closed);
     }
     public void close(){
         server.disconnect();
@@ -61,10 +53,5 @@ public class ClientMain{
         }catch(InterruptedException e){
             LOGGER.error("Error shutting down workerGroup",e);
         }
-        closed();
-    }
-    public final InjectionPoint<ClientMain> injectAfterClose=new Inject();
-    private void closed(){
-        ((Inject)injectAfterClose).run(this);
     }
 }

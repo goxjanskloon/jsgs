@@ -34,7 +34,7 @@ public class SignalHandler extends SimpleChannelInboundHandler<Integer>{
     @Override public void channelActive(ChannelHandlerContext ctx){
         channel=ctx.fireChannelActive().channel();
     }
-    @Override protected void channelRead0(ChannelHandlerContext ctx,Integer signal){
+    @Override protected void messageReceived(ChannelHandlerContext channelHandlerContext,Integer signal){
         listeners.get(signal).run();
     }
 }

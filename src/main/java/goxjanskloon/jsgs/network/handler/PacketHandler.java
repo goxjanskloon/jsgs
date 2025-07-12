@@ -33,8 +33,8 @@ public class PacketHandler extends SimpleChannelInboundHandler<Packet<?>>{
     @Override public void channelActive(ChannelHandlerContext ctx){
         channel=ctx.fireChannelActive().channel();
     }
-    @Override protected void channelRead0(ChannelHandlerContext ctx,Packet<?> msg){
-        listeners.get(msg.getType()).accept(msg);
+    @Override protected void messageReceived(ChannelHandlerContext channelHandlerContext,Packet<?> packet){
+        listeners.get(packet.getType()).accept(packet);
     }
     public void addListener(PacketType<?> type,PacketListener listener){
         listeners.put(type,listener);
